@@ -2,9 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\EventNovoRegistro;
 use Illuminate\Http\Request;
 use App\User;
 use Illuminate\Support\Facades\Auth;
+
+use Illuminate\Support\Str;
+
 
 class AutenticadorControlador extends Controller
 {
@@ -21,10 +25,14 @@ class AutenticadorControlador extends Controller
         $user = new User([
             "name" => $request->name,
             "email" => $request->email,
-            "password" => bcrypt($request->password)
+            "password" => bcrypt($request->password),
+            "token" => Str::random(60)
         ]);
 
         $user->save();
+
+        event(new EventNovoRegistro($user));
+
         return response()->json([
             "res" => 'Usuário criado com sucesso'
         ], 201);
@@ -38,7 +46,8 @@ class AutenticadorControlador extends Controller
 
         $credenciais = [
             "email" => $request->email,
-            "password" => $request->password
+            "password" => $request->password,
+            "active" => 1
         ];
 
         if (!Auth::attempt($credenciais)) {
@@ -49,7 +58,7 @@ class AutenticadorControlador extends Controller
 
         $user = $request->user();
 
-        $token = $user->createToken("Token de acesso")->accessToken();
+        $token = $user->createToken("Token de acesso")->accessToken;
 
         return response()->json([
             "token" => $token
@@ -61,5 +70,20 @@ class AutenticadorControlador extends Controller
         return response()->json([
             "res" => "Deslogado com sucesso!"
         ]);
+    }
+
+    public function ativarRegistro($id, $token)
+    {
+        // verificar se o token está coerente com o token que está vindo pela req
+        $user = User::find($id);
+        if ($user) {
+            if ($user->token == $token) {
+                $user->active = true;
+                $user->token = '';
+                $user->save();
+                return view('emails.registroativo');
+            }
+        }
+        return view('emails.registroerro');
     }
 }
